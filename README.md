@@ -140,4 +140,4 @@ The **cost-estimation-server** supports the browser extension by providing data 
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Mozilla Public License 2.0](LICENSE).
