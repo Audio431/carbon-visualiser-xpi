@@ -123,12 +123,6 @@ Legacy server code remains in `cost-estimation-server/` with a `dontbuild` marke
 - [ ] Remove legacy DevTools and WebSocket code
 - [ ] Privileged signing exploration with Mozilla
 
-## Research Context
-
-Developed as an Honours Individual Project at the University of Glasgow, School of Computing Science, under the supervision of Prof. Wim Vanderbauwhede (Low Carbon and Sustainable Computing research group).
-
-The full dissertation is available: *"Developing Infrastructure: Full-Path Carbon Emission Tracker for a Web Application"* (Atip Kajitamkul, March 2025).
-
 ## License
 
 [Mozilla Public License 2.0](LICENSE)
