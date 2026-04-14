@@ -25,10 +25,7 @@ interface EmissionsData {
   };
   serverCO2Emissions: {
     actual: number;
-    "North Scotland": number;
-    "South Scotland": number;
-    England: number;
-    GB: number;
+    [region: string]: number;
   };
 }
 

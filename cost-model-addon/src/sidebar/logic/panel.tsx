@@ -95,10 +95,7 @@ interface EmissionsData {
   };
   serverCO2Emissions: {
     actual: number;
-    "North Scotland": number;
-    "South Scotland": number;
-    England: number;
-    GB: number;
+    [region: string]: number;
   };
 }
 
@@ -110,41 +107,36 @@ export default function SideBar() {
   const [emissionsData, setEmissionsData] = React.useState<EmissionsData | undefined>(undefined);
 
   React.useEffect(() => {
-    // Setup message listeners
     const messageHandler = (message: any, sender: any, sendResponse: any) => {
       if (message.type === MessageType.CPU_USAGE && message.from === "background") {
-        console.log("[Sidebar] CPU Usage:", message.payload);
+        console.log("[Sidebar] Emissions data received:", message.payload);
         
         try {
           setEmissionsData(message.payload);
           sendResponse({ success: true });
         } catch (error: unknown) {
-          console.error("[Sidebar] Error handling CPU_USAGE message:", error);
+          console.error("[Sidebar] Error handling emissions data:", error);
           sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
         }
       }
       
-      // Return true for asynchronous response
       return true;
     };
 
     browser.runtime.onMessage.addListener(messageHandler);
 
-    // Cleanup listener on unmount
     return () => {
       browser.runtime.onMessage.removeListener(messageHandler);
     };
   }, []);
 
   React.useEffect(() => {
-    // Setup sidebar close handler
     const handleSidebarClose = () => {
       browser.sidebarAction.close();
     };
 
     browser.action.onClicked.addListener(handleSidebarClose);
 
-    // Cleanup listener on unmount
     return () => {
       browser.action.onClicked.removeListener(handleSidebarClose);
     };
@@ -152,11 +144,9 @@ export default function SideBar() {
   
   const handleTrackingButton = async () => {
     try {
-      // Clear previous errors
       setErrors([]);
       setShowErrorBanner(false);
       
-      // If we're stopping tracking, set hasResults to true to keep showing the data
       if (isTracking) {
         setHasResults(true);
       }
@@ -167,24 +157,21 @@ export default function SideBar() {
         payload: { enabled: !isTracking },
       });
   
-      // Only validate payload when *enabling* tracking
+      // Only validate payload when enabling tracking
       if (!isTracking) {
-        const { contentNotified = false, devtoolsNotified = false, WebSocketConnected = false, CPUUsageMonitoring = false} = payload || {};
+        const { contentNotified = false, CPUUsageMonitoring = false } = payload || {};
         const failures: string[] = [];
 
         if (!contentNotified) failures.push("Content script may not be injected");
-        if (!devtoolsNotified) failures.push("Devtools may not be open");
-        if (!WebSocketConnected) failures.push("WebSocket connection not established");
         if (!CPUUsageMonitoring) failures.push("CPU monitoring not started");
       
         if (failures.length) {
           failures.forEach(msg => console.error(`[Sidebar] Error: ${msg}`));
           setErrors(failures);
           setShowErrorBanner(true);
-          return; // Don't continue if there are errors
+          return;
         }
         
-        // Only clear previous results if we're successfully starting tracking
         if (hasResults) {
           setHasResults(false);
         }
@@ -202,7 +189,6 @@ export default function SideBar() {
     setShowErrorBanner(false);
   };
 
-  // Determine button style and icon based on state
   const getButtonProps = () => {
     if (isTracking) {
       return {
@@ -233,7 +219,6 @@ export default function SideBar() {
 
   const buttonProps = getButtonProps();
 
-  // Dynamically determine header background color
   const headerStyle = {
     ...styles.header,
     backgroundColor: isTracking ? "rgba(76, 175, 80, 0.12)" : "rgba(255, 255, 255, 0.6)",
@@ -269,16 +254,9 @@ export default function SideBar() {
               <li key={index} style={{ fontSize: '0.85rem' }}>{error}</li>
             ))}
           </ul>
-
-          { errors.includes("Devtools may not be open") && !errors.includes("Content script may not be injected") ? (
-            <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'rgba(211, 47, 47, 0.7)' }}>
-              Please ensure that the Devtools is open
-            </div>
-          ) : (
-            <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'rgba(211, 47, 47, 0.7)' }}>
-              Please reload the page and try again
-            </div>
-          )}
+          <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'rgba(211, 47, 47, 0.7)' }}>
+            Please reload the page and try again
+          </div>
         </Alert>
       </Collapse>
 

@@ -2,7 +2,7 @@ import { getActiveTabId, MessagingService, TabInfo } from './services';
 import { getActiveTab } from './services';
 import { MessageType, Action } from '../common/message.types';
 import { WebSocketService } from './services';
-import { MonitorCpuUsageController, monitorCpuUsageAll } from './services';
+import { MonitorCpuUsageController, monitorCpuUsageAll, AggregationService } from './services';
 import { eventBus } from './shared/eventBus';
 
 export class BackgroundMediator {
@@ -15,9 +15,14 @@ export class BackgroundMediator {
 
     private portConnections: Map<number, Record<string, browser.runtime.Port>> = new Map();
 
+    private aggregationService: AggregationService;
+
     private constructor() {
         this.messagingService = MessagingService.getInstance();
         this.websocketService = WebSocketService.getInstance();
+
+        // Replaces server-side aggregation (WebSocket → local processing)
+        this.aggregationService = AggregationService.getInstance();
 
         this.messagingService.setMessageHandler(this.processExternalMessage.bind(this));
         this.messagingService.setPortMessageHandler(this.processPortMessage.bind(this));
@@ -41,27 +46,27 @@ export class BackgroundMediator {
 
 
     private async processServerMessage(message: any): Promise<void> {
-        if (message[0].type === "AGGREGATED_USAGE" && 
+        if (message[0].type === "AGGREGATED_USAGE" &&
             message[1].type === "CPU_CO2_EMISSIONS" &&
             message[2].type === "SERVER_CO2_EMISSIONS") {
             this.messagingService.sendToRuntime({
-                    type: MessageType.CPU_USAGE, // Using existing MessageType,
-                    from: 'background',
-                    payload: {
-                        aggregatedUsage: message[0].payload,
-                        cpuCO2Emissions: message[1].payload,
-                        serverCO2Emissions: message[2].payload
-                    }
+                type: MessageType.CPU_USAGE, // Using existing MessageType,
+                from: 'background',
+                payload: {
+                    aggregatedUsage: message[0].payload,
+                    cpuCO2Emissions: message[1].payload,
+                    serverCO2Emissions: message[2].payload
+                }
             });
         }
     }
- 
+
     /* Establishes the connection between the scripst and the background */
 
     // Handle incoming runtime messages from content scripts, devtools, and sidebar
     private async processExternalMessage(
-        message: RuntimeMessage, 
-        sender: any, 
+        message: RuntimeMessage,
+        sender: any,
         sendResponse: (response?: any) => void
     ): Promise<void> {
         if (message.from === 'sidebar') {
@@ -73,25 +78,45 @@ export class BackgroundMediator {
                     } else {
                         sendResponse({ status: "error", payload: result });
                     }
-                    break; 
+                    break;
             }
         }
     }
 
-    private async handleToggleTracking(event: RuntimeMessage): Promise<{ contentNotified: boolean, devtoolsNotified: boolean, WebSocketConnected: boolean, CPUUsageMonitoring: boolean }> {
-        // Update the tracking state and get a message to send.
+    private async handleToggleTracking(event: RuntimeMessage): Promise<{ contentNotified: boolean, devtoolsNotified: boolean, CPUUsageMonitoring: boolean }> {
         const trackingMessage = await this.updateTrackingState(event.payload.enabled);
-    
-        // Send notifications concurrently and await both.
-        const [contentNotified , devtoolsNotified] = await Promise.all([
+
+        const [contentNotified, devtoolsNotified] = await Promise.all([
             this.notifyContentScript(trackingMessage),
             this.notifyDevtools(trackingMessage),
         ]);
 
-        const WebSocketConnected = await this.toggleWebsocketConnection(contentNotified && devtoolsNotified && event.payload.enabled);
-        const CPUUsageMonitoring = await this.toggleCPUUsageMonitoring(contentNotified && devtoolsNotified && event.payload.enabled);
+        const CPUUsageMonitoring = await this.toggleCPUUsageMonitoring(
+            contentNotified && event.payload.enabled
+        );
 
-        return { contentNotified, devtoolsNotified, WebSocketConnected, CPUUsageMonitoring };
+        // When stopping, run local aggregation and send results to sidebar
+        if (!event.payload.enabled) {
+            const aggregatedData = this.aggregationService.getAggregatedDataPerTab();
+            const cpuCO2 = await this.aggregationService.convertCpuTimeToCO2Emissions();
+            const networkCO2 = await this.aggregationService.convertNetworkToCO2Emissions();
+
+            this.messagingService.sendToRuntime({
+                type: MessageType.CPU_USAGE,
+                from: 'background',
+                payload: {
+                    aggregatedUsage: Object.fromEntries(
+                        [...aggregatedData.entries()].map(([k, v]) => [k, Object.fromEntries(v)])
+                    ),
+                    cpuCO2Emissions: Object.fromEntries(cpuCO2),
+                    serverCO2Emissions: Object.fromEntries(networkCO2),
+                },
+            });
+
+            this.aggregationService.clearData();
+        }
+
+        return { contentNotified, devtoolsNotified, CPUUsageMonitoring };
     }
 
 
@@ -107,7 +132,7 @@ export class BackgroundMediator {
             }
         };
     }
-    
+
     private async notifyContentScript(message: RuntimeMessage): Promise<boolean> {
         try {
             const activeTab = await getActiveTab();
@@ -122,7 +147,7 @@ export class BackgroundMediator {
         }
     }
 
-    private async notifyDevtools(message: RuntimeMessage): Promise<boolean>{
+    private async notifyDevtools(message: RuntimeMessage): Promise<boolean> {
         try {
             const activeTabId = await getActiveTabId();
             const devtoolsPort = this.portConnections.get(activeTabId!)?.['devtools'];
@@ -148,9 +173,10 @@ export class BackgroundMediator {
             port.postMessage({ type: "REQUEST_TAB_ID" });
         } else {
             const tabId = port.sender?.tab?.id ?? -1;
-            this.portConnections.set(tabId, { 
-                ...this.portConnections.get(tabId), 
-                [port.name]: port });
+            this.portConnections.set(tabId, {
+                ...this.portConnections.get(tabId),
+                [port.name]: port
+            });
         }
     }
 
@@ -180,8 +206,9 @@ export class BackgroundMediator {
                 this.handleContentEvent(message.payload);
                 break;
             case MessageType.NETWORK_ENTRY:
-                console.log('[BackgroundMediator] Network entry received:', message.payload);
-                 // TODO: forward to local aggregation service once server is removed
+                const tabId = port.sender?.tab?.id?.toString() ?? 'unknown';
+                console.log('[Mediator] Network entry for tab:', tabId);
+                this.aggregationService.processNetworkEntry(tabId, message.payload);
                 break;
         }
     }
@@ -190,7 +217,7 @@ export class BackgroundMediator {
      * Process the message and sends it to the appropriate handler.
      * handleContentPortMessage -> handleContentEvent
      */
-    private async handleContentEvent (payload: EventPayload<Action>): Promise<void> {
+    private async handleContentEvent(payload: EventPayload<Action>): Promise<void> {
         switch (payload.event) {
             case Action.CLICK_EVENT:
                 // this.messagingService.sendToRuntime({
@@ -211,13 +238,13 @@ export class BackgroundMediator {
     private async handleDevtoolsPortMessage(message: any, port?: browser.runtime.Port): Promise<void> {
         switch (message.type) {
             case MessageType.REQUEST_TRACKING_STATE:
-                
+
                 const runtimeMessage: RuntimeMessage = {
                     type: MessageType.TRACKING_STATE,
                     from: 'background',
                     payload: { state: await this.getTrackingState() }
                 };
-                
+
                 this.messagingService.sendPortMessage(port!, runtimeMessage);
                 break;
 
@@ -225,11 +252,11 @@ export class BackgroundMediator {
                 const tabId = message.tabId;
                 this.portConnections.set(tabId, { 'devtools': port! });
                 break;
-            
+
             case MessageType.NETWORK_DATA:
                 eventBus.publish("DEVTOOLS_MESSAGE", message);
                 break;
-            
+
             case "SEND_TO_WEBSOCKET":
                 this.websocketService.sendMessage({
                     type: MessageType.NETWORK_DATA,
@@ -240,22 +267,26 @@ export class BackgroundMediator {
     }
 
     // Handle tab updates
-    private async handleOnTabUpdate(tabId: number, changeInfo: string, tab: browser.tabs.Tab): Promise<void> {
-        console.log('[Background] Port connections:', [...this.portConnections]);
+    private async handleOnTabUpdate(_tabId: number, changeInfo: { status?: string }, tab: browser.tabs.Tab): Promise<void> {
+        if (changeInfo.status && changeInfo.status !== 'complete') return;
+        if (tab.url?.startsWith('about:') || tab.url?.startsWith('moz-extension:')) return;
 
         const isTracking = await this.getTrackingState();
 
         if (isTracking) {
             const activeTab = await getActiveTab();
+            if (activeTab?.url?.startsWith('about:') || activeTab?.url?.startsWith('moz-extension:')) return;
+
             const runtimeMessage: RuntimeMessage = {
                 type: MessageType.TRACKING_STATE,
                 from: 'background',
                 payload: { state: isTracking }
             };
-            if (activeTab)
-                await this.messagingService.sendToTab(activeTab, runtimeMessage);
-            else {
-                await this.messagingService.sendToTab(tab, runtimeMessage);
+
+            try {
+                await this.messagingService.sendToTab(activeTab ?? tab, runtimeMessage);
+            } catch (_error) {
+                // Expected during page navigation; content script connects via port when ready
             }
         }
     }
@@ -282,7 +313,7 @@ export class BackgroundMediator {
 
     private async toggleWebsocketConnection(newState: boolean): Promise<boolean> {
         try {
-            if (newState) { 
+            if (newState) {
                 const clientId = localStorage.getItem('clientId');
                 console.log('Client ID:', clientId);
                 if (!clientId) {
@@ -303,46 +334,47 @@ export class BackgroundMediator {
 
     private async toggleCPUUsageMonitoring(newState: boolean): Promise<boolean> {
         try {
-          if (newState) {
-            // Use the new monitor function instead
-            this.cpuMonitor = await monitorCpuUsageAll(0);
-            
-            // Listen for both active and background events
-            window.addEventListener('cpu-spike', this.CPUListener);
-            window.addEventListener('background-cpu-spike', this.backgroundCPUListener);
-          } else {
-            if (this.cpuMonitor) {
-              this.cpuMonitor.cancel();
-              this.cpuMonitor = null;
+            if (newState) {
+                // Use the new monitor function instead
+                this.cpuMonitor = await monitorCpuUsageAll(0);
+
+                // Listen for both active and background events
+                window.addEventListener('cpu-spike', this.CPUListener);
+                window.addEventListener('background-cpu-spike', this.backgroundCPUListener);
+            } else {
+                if (this.cpuMonitor) {
+                    this.cpuMonitor.cancel();
+                    this.cpuMonitor = null;
+                }
+                window.removeEventListener('cpu-spike', this.CPUListener);
+                window.removeEventListener('background-cpu-spike', this.backgroundCPUListener);
             }
-            window.removeEventListener('cpu-spike', this.CPUListener);
-            window.removeEventListener('background-cpu-spike', this.backgroundCPUListener);
-          }
-          return true;
+            return true;
         } catch (error) {
-          console.error("[Background] Failed to toggle CPU usage monitoring:", error);
-          return false;
+            console.error("[Background] Failed to toggle CPU usage monitoring:", error);
+            return false;
         }
-      }
+    }
 
-    private CPUListener = (event: Event) => {
+    private handleCpuEvent(event: Event, isBackground: boolean): void {
         const customEvent = event as CustomEvent<{ cpuUsage: number; tabInfo: TabInfo }>;
+        const { tabInfo, cpuUsage } = customEvent.detail;
+        if (tabInfo.pid === undefined || tabInfo.tabId === undefined || tabInfo.outerWindowID === undefined) return;
+        console.log('[Mediator] CPU entry for tab:', tabInfo.tabId.toString());
 
-        const runtimeMessage: RuntimeMessage = {
-            type: MessageType.CPU_USAGE,
-            payload: customEvent.detail
-        };
+        this.aggregationService.processCpuData({
+            tabInfo: {
+                pid: tabInfo.pid,
+                title: tabInfo.title ?? 'Untitled',
+                outerWindowID: tabInfo.outerWindowID,
+                tabId: tabInfo.tabId.toString(),
+            },
+            cpuUsage,
+            isBackground,
+        });
+    }
 
-        this.websocketService.sendMessage(runtimeMessage);
-    };
-
-    private backgroundCPUListener = (event: Event) => {
-        const customEvent = event as CustomEvent<{ cpuUsage: number; tabInfo: TabInfo }>;
-        const runtimeMessage: RuntimeMessage = {
-            type: MessageType.BACKGROUND_CPU_USAGE,  // Need to add this new message type
-            payload: customEvent.detail
-        };
-        this.websocketService.sendMessage(runtimeMessage);
-    };
+    private CPUListener = (event: Event) => this.handleCpuEvent(event, false);
+    private backgroundCPUListener = (event: Event) => this.handleCpuEvent(event, true);
 
 }

@@ -60,8 +60,8 @@
   "permissions": ["scripting", "tabs", "activeTab", "mozillaAddons"],
   "host_permissions": ["<all_urls>"],
 
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; connect-src 'none' ws://fullpath-energyemissions-cost-model.onrender.com/ https://fullpath-energyemissions-cost-model.onrender.com/ ws://localhost:3000/ http://localhost:3000/;"
+ "content_security_policy": {
+    "extension_pages": "script-src 'self'; connect-src https://api.boavizta.org/ https://api.carbonintensity.org.uk/"
   }
 
 }
