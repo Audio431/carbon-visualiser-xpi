@@ -118,9 +118,12 @@ Legacy server code remains in `cost-estimation-server/` with a `dontbuild` marke
 
 ## Roadmap
 
+- [ ] Remove legacy DevTools and WebSocket code
+- [ ] Auto-stop tracking on sidebar close
 - [ ] Configurable device power profiles (replace hardcoded M1)
 - [ ] Global carbon intensity via Electricity Maps API
-- [ ] Remove legacy DevTools and WebSocket code
+- [ ] Timer-based tracking UI
+- [ ] Per-tab emissions breakdown in real time
 - [ ] Privileged signing exploration with Mozilla
 
 ## License
