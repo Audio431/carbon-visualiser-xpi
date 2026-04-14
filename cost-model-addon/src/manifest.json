@@ -40,7 +40,7 @@
 
     "browser_specific_settings": {
         "gecko": {
-        "id": "my-extension@example.com"
+        "id": "carbon-visualiser@audio431.dev"
         }
     },
 
