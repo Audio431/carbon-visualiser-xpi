@@ -1,143 +1,134 @@
-# Privileged Web Extension: Carbon Visualiser [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Audio431/carbon-visualiser-xpi/blob/main/LICENSE) [![CI](https://github.com/Audio431/carbon-visualiser-xpi/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Audio431/carbon-visualiser-xpi/actions/workflows/CI.yml) [![Dependabot Updates](https://github.com/Audio431/carbon-visualiser-xpi/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Audio431/carbon-visualiser-xpi/actions/workflows/dependabot/dependabot-updates) [![Server Uptime](https://img.shields.io/website?label=server&down_color=red&up_color=green&url=https://fullpath-energyemissions-cost-model.onrender.com/live)](https://fullpath-energyemissions-cost-model.onrender.com/live)
+# Carbon Visualiser for Firefox
 
-Firefox priviledged browser extension to track the internal system metrics and generate estimated carbon emissions.
+[![GitHub license](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Audio431/carbon-visualiser-xpi/blob/main/LICENSE) [![CI](https://github.com/Audio431/carbon-visualiser-xpi/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Audio431/carbon-visualiser-xpi/actions/workflows/CI.yml)
 
-## Overview
+A Firefox browser extension that tracks real-time CPU utilisation and network activity across browser tabs, then converts those measurements into estimated carbon emissions using regional carbon intensity data.
 
-This browser extension uses experimental API features in Firefox for access metrics and is built with modern web technologies including React, TypeScript, and Webpack. The project leverages Babel for transpilation, Material UI and Emotion for styling, and a suite of tools to streamline development and packaging.
+## Why This Exists
 
-Additionally, a backend service, **cost-estimation-server**, supports the extension by providing data and real-time communication. This component is deployed live; check its status above.
+Web browsing consumes energy, but the environmental cost is invisible to users. End-user devices account for roughly 51% of streaming-related emissions (Carbon Trust, 2021), yet no browser-native tool exists to measure this impact in real time.
 
+This extension bridges that gap by accessing system-level metrics through Firefox's privileged WebExtension APIs, something standard extensions cannot do. It captures per-process CPU time via `ChromeUtils.requestProcInfo()` and per-request network transfer sizes via the Performance API, then applies empirical conversion factors and live carbon intensity data to estimate CO₂ emissions.
 
-## Interface
-<img width="250" alt="Screenshot 2025-03-28 at 20 55 20" src="https://github.com/user-attachments/assets/b5ff026e-b93b-4125-ad78-e7b8672bfa6f" />
-<img width="250" alt="Screenshot 2025-03-28 at 20 55 30" src="https://github.com/user-attachments/assets/1571946c-dfec-4262-8b17-b4526fd8f269" />
+## What It Does
 
-## Known Limitations
+- Tracks CPU time per browser tab using Firefox's internal process monitoring
+- Captures network transfer sizes and timing for every request (no DevTools required)
+- Converts measurements to energy consumption using the Boavizta API
+- Applies real-time carbon intensity data from the UK Carbon Intensity API
+- Displays per-session carbon breakdown (device vs. network) in a sidebar panel
+- Runs entirely client-side with no external server dependency
 
-When starting a tracking session, please note the following:
+## Architecture
 
-* **Content Script Injection:** On certain privileged pages (e.g., about:* pages), the content script might not inject. In such cases, navigate to another webpage to begin tracking.
-* **Developer Tools Requirement:** The extension requires that the developer tools are open at the time you start the tracking session to properly capture metrics.
+All data collection and processing runs within the extension:
 
+```
+Content Script (PerformanceObserver)
+    ↓ network timing + transfer sizes
+Background Script (Aggregation Service)
+    ← CPU metrics (ChromeUtils.requestProcInfo)
+    ← Carbon intensity (Carbon Intensity API)
+    ← Device power profile (Boavizta API)
+    ↓ CO₂ estimates
+Sidebar UI (React)
+```
 
-##  Browser Extension (cost-model-addon)
+The extension makes no requests to any server controlled by the developer. The only external calls are to public carbon/energy APIs (Boavizta, UK Carbon Intensity).
 
-### Requirements
+### Privileged API Usage
 
-- **Firefox Versions:** Requires Firefox Nightly and Developer Edition  
-  (see more details in the [Experimental APIs in Privileged Extensions](https://firefox-source-docs.mozilla.org/toolkit/components/extensions/webextensions/basics.html#built-in-versus-experimental-apis))
-- **Additional Settings:**  
-  In the `about:config` page, set:
-  - `xpinstall.signatures.required` to `false`
-  - `extensions.experiments.enabled` to `true`
-- **Tested Environment:**  
-  - Firefox Developer Edition v137.01b  
-  - macOS Sequoia v15.3.2
+The extension uses `experiment_apis` for read-only access to browser internals:
 
-### Installation
+| API | Purpose | Access Pattern |
+|-----|---------|---------------|
+| `ChromeUtils.requestProcInfo()` | Per-process CPU time and memory | Read-only |
+| `Services.wm.getEnumerator()` | Tab-to-process mapping via outerWindowID | Read-only |
 
-1. **Clone the Repository:**
+No browser state is modified. No user data leaves the browser.
 
-   ```bash
-   git clone <repository-url>
-   cd cost-model-addon
-   ```
-
-2. **Install Dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-### Available Scripts
-
-| Script                | Command                                                                                                                                          | Description                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| **test**              | `echo "Error: no test specified" && exit 1`                                                                                                      | Placeholder for tests (no tests currently specified).                                                               |
-| **build**             | `webpack --config webpack.dev.js --mode=development --watch`                                                                                     | Bundles the project in development mode and watches for file changes.                                                 |
-| **clean**             | `rm -rf dist`                                                                                                                                    | Cleans the build output by removing the `dist` directory.                                                             |
-| **xpi**               | `cd dist && web-ext build --overwrite-dest && mv web-ext-artifacts/carbon_footprint_tracker-1.0.zip web-ext-artifacts/carbon_footprint_tracker-1.0.xpi` | Packages the extension as a Firefox XPI file.                                                                       |
-| **build:production**  | `webpack --config webpack.prod.js --mode=production`                                                                                            | Bundles the project for production deployment.                                                                      |
-
-### Development
-
-- **Development Build:**  
-  Run `npm run build` to start the development build with webpack in watch mode.
-- **Packaging:**  
-  After building the project, run `npm run xpi` from the root to generate an XPI package for distribution.
-- **Cleaning Up:**  
-  To remove previous builds, execute `npm run clean`.
-
-### Key Dependencies
-
-- **Babel & Webpack:**  
-  - `@babel/core`, `@babel/preset-env`, `@babel/preset-react`, `babel-loader`  
-  - `webpack`, `webpack-cli`, `copy-webpack-plugin`, `html-webpack-plugin`
-- **React & TypeScript:**  
-  - `react`, `react-dom`, `typescript`, `ts-loader`, `@types/react`, `@types/react-dom`
-- **UI & Styling:**  
-  - `@mui/material`, `@mui/icons-material`  
-  - `@emotion/react`, `@emotion/styled`
-- **Utility Libraries:**  
-  - `dotenv`, `dotenv-cli`  
-  - `web-ext`, `webextension-polyfill`
-- **Chart Visualisation:**  
-  - `@visx/gradient`, `@visx/group`, `@visx/mock-data`, `@visx/scale`, `@visx/shape`  
-  - `@react-spring/web`
-- **Type Definitions:**  
-  - `@types/events`, `@types/firefox`, `@types/firefox-webext-browser`
-
-## Backend Service (cost-estimation-server)
-
-### Overview
-
-The **cost-estimation-server** supports the browser extension by providing data and real-time communication. Built with Node.js, Express, and TypeScript, it is deployed live and its status can be monitored through the provided links.
-
-- **Live Deployment:** [https://fullpath-energyemissions-cost-model.onrender.com/live](https://fullpath-energyemissions-cost-model.onrender.com/live)
-- **Monitoring (Better Uptime):** https://carbon-estimation.betteruptime.com/
+## Installation
 
 ### Requirements
 
-- **Node.js:** Ensure a compatible Node.js version is installed.
-- **Key Dependencies:**
-  - **Express:** For handling HTTP requests.
-  - **TypeScript:** For type safety and modern JavaScript features.
-  - Additional libraries such as `ts-node`, `node-cache`, `winston`, and `ws` (for WebSocket support).
+- Firefox Developer Edition or Nightly
+- In `about:config`, set:
+  - `xpinstall.signatures.required` → `false`
+  - `extensions.experiments.enabled` → `true`
 
-### Installation
+### Setup
 
-1. **Navigate to the Backend Directory:**  
-   (If the backend service is in a separate directory, navigate accordingly.)
+```bash
+git clone https://github.com/Audio431/carbon-visualiser-xpi.git
+cd carbon-visualiser-xpi/cost-model-addon
+npm install
+npm run build
+```
 
-   ```bash
-   cd cost-estimation-server
-   ```
+Load the extension in Firefox:
+1. Open `about:debugging#/runtime/this-firefox`
+2. Click "Load Temporary Add-on"
+3. Select `cost-model-addon/dist/manifest.json`
 
-2. **Install Dependencies:**
+### Running Tests
 
-   ```bash
-   npm install
-   ```
+```bash
+npm test
+```
 
-### Available Script
+## Carbon Calculation Methodology
 
-| Script   | Command                                                                                                                                                                    | Description                                                                                                  |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **start**| `tsc --noEmit & node --no-warnings=ExperimentalWarning --loader ts-node/esm src/index.ts`                                                                                 | Compiles the TypeScript files (without emitting) and starts the backend service using ts-node and Node.js.     |
+The emission estimates follow the methodology described in the accompanying dissertation (University of Glasgow, 2025).
 
-### Development
+**CPU emissions** (Equation 5.1):
+`E_CPU = T_CPU × P_device × 10⁻³`
 
-- **Starting the Service:**  
-  Run the following command to start the backend service:
+Where `T_CPU` is total CPU time in hours and `P_device` is device power consumption in watts, sourced from the Boavizta API.
 
-  ```bash
-  npm start
-  ```
+**Network emissions** (Equation 5.2):
+`E_network = T_wait × P_datacenter + D_size × E_transmission`
 
-- **Testing the Service:**  
-  Although no automated tests are currently configured, you can verify the backend functionality by sending HTTP requests (using tools like `curl` or Postman) to the endpoints defined in `src/index.ts`.
+Where `D_size` is total data transferred and `E_transmission` is 0.065 kWh/GB for fixed-line broadband (Aslan et al., 2018).
+
+**Total CO₂** (Equation 5.3):
+`CO₂e = (E_CPU + E_network) × CI_region`
+
+Where `CI_region` is the regional carbon intensity in gCO₂e/kWh.
+
+## Current Scope and Limitations
+
+- CPU power profile is currently configured for Apple M1; configurable device support is planned
+- Carbon intensity data uses the UK Carbon Intensity API; global coverage via Electricity Maps is planned
+- Network timing for cross-origin resources without `Timing-Allow-Origin` headers will have zeroed timing fields
+- Content scripts cannot inject on privileged pages (`about:*`)
+
+## Migration Status
+
+This extension was originally built with a client-server architecture (dissertation version, March 2025). The following changes have been made:
+
+| Component | Before | After |
+|-----------|--------|-------|
+| Network capture | DevTools `onRequestFinished` (required DevTools open) | `PerformanceObserver` in content script |
+| Data aggregation | External Node.js server via WebSocket | Local background script |
+| Carbon calculation | Server-side | Client-side |
+| External server | Required (Render deployment) | None |
+| DevTools dependency | Required | Removed |
+
+Legacy server code remains in `cost-estimation-server/` with a `dontbuild` marker. Removal is pending final validation.
+
+## Roadmap
+
+- [ ] Configurable device power profiles (replace hardcoded M1)
+- [ ] Global carbon intensity via Electricity Maps API
+- [ ] Remove legacy DevTools and WebSocket code
+- [ ] Privileged signing exploration with Mozilla
+
+## Research Context
+
+Developed as an Honours Individual Project at the University of Glasgow, School of Computing Science, under the supervision of Prof. Wim Vanderbauwhede (Low Carbon and Sustainable Computing research group).
+
+The full dissertation is available: *"Developing Infrastructure: Full-Path Carbon Emission Tracker for a Web Application"* (Atip Kajitamkul, March 2025).
 
 ## License
 
-This project is licensed under the [Mozilla Public License 2.0](LICENSE).
+[Mozilla Public License 2.0](LICENSE)
