@@ -179,6 +179,10 @@ export class BackgroundMediator {
             case MessageType.EVENT_LISTENER:
                 this.handleContentEvent(message.payload);
                 break;
+            case MessageType.NETWORK_ENTRY:
+                console.log('[BackgroundMediator] Network entry received:', message.payload);
+                 // TODO: forward to local aggregation service once server is removed
+                break;
         }
     }
 
@@ -234,7 +238,6 @@ export class BackgroundMediator {
                 break;
         }
     }
-
 
     // Handle tab updates
     private async handleOnTabUpdate(tabId: number, changeInfo: string, tab: browser.tabs.Tab): Promise<void> {

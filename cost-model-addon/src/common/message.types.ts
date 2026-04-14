@@ -10,7 +10,7 @@ enum MessageType {
   REQUEST_TRACKING_STATE = 'REQUEST_TRACKING_STATE',
   NETWORK_DATA = 'NETWORK_DATA',
   BACKGROUND_CPU_USAGE = 'BACKGROUND_CPU_USAGE',
-
+  NETWORK_ENTRY = 'NETWORK_ENTRY',
 }
 
 enum Action {
@@ -50,6 +50,7 @@ declare global {
     [MessageType.PREPARE_TO_CLOSE]: any;
     [MessageType.REQUEST_TRACKING_STATE]: any;
     [MessageType.NETWORK_DATA]: RoundTrip;
+    [MessageType.NETWORK_ENTRY]: any;
   }
 
   interface Message<T extends MessageType = MessageType> {

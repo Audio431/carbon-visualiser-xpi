@@ -12,6 +12,7 @@ export class EventHandler {
     private mutationCount: number = 0;
 
     private performanceObserver: PerformanceObserver | null = null;
+    private networkObserver: PerformanceObserver | null = null;
     private mutationObserver: MutationObserver | null = null;
 
     // IDs for intervals so we can clear them later
@@ -114,8 +115,58 @@ export class EventHandler {
     }
 
     /**
-     * Start tracking: set up observers once and attach event handlers.
+     * Sets up a PerformanceObserver to track network requests.
+     * Captures resource and navigation timing entries, extracting
+     * transfer sizes and granular timing breakdowns (DNS, connect,
+     * TTFB, receive) for each request.
+     * 
+     * Replaces the previous DevTools-dependent HAR capture approach
+     * (browser.devtools.network.onRequestFinished), removing the
+     * requirement for DevTools to be open during tracking.
+     * 
+     * Limitation: cross-origin resources without Timing-Allow-Origin
+     * headers will have zeroed timing fields and potentially zero
+     * transferSize. These entries are skipped.
      */
+
+    private setupNetworkObserver(): void {
+        this.networkObserver = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                const e = entry as PerformanceResourceTiming;
+
+                // Skip entries with no transfer data (opaque cross-origin responses)
+                if (e.transferSize === 0 && e.duration === 0) continue;
+
+                const timings = {
+                    all: e.duration,
+                    dns: e.domainLookupEnd - e.domainLookupStart,
+                    connect: e.connectEnd - e.connectStart,
+                    send: e.requestStart > 0 ? e.requestStart - e.connectEnd : 0,
+                    wait: e.responseStart > 0 ? e.responseStart - e.requestStart : 0,
+                    receive: e.responseEnd > 0 ? e.responseEnd - e.responseStart : 0,
+                    ssl: e.secureConnectionStart > 0 ? e.connectEnd - e.secureConnectionStart : 0,
+                };
+
+                const networkEntry = {
+                    url: e.name,
+                    initiatorType: e.initiatorType,
+                    transferSize: e.transferSize,
+                    encodedBodySize: e.encodedBodySize,
+                    decodedBodySize: e.decodedBodySize,
+                    timings,
+                };
+
+                this.port?.postMessage({
+                    type: MessageType.NETWORK_ENTRY,
+                    from: 'content',
+                    payload: networkEntry,
+                });
+            }
+        });
+
+        this.networkObserver.observe({ entryTypes: ['resource', 'navigation'] });
+    }
+
     startTracking(): void {
         if (this.trackingActive) {
             console.warn('[Debug] startTracking() called but tracking is already active.');
@@ -131,6 +182,7 @@ export class EventHandler {
         // Set up both observers
         this.setupLongTaskObserver();
         this.setupMutationObserver();
+        this.setupNetworkObserver();
 
         // Click Handler
         this.clickHandler = (e: Event) => {
