@@ -1,4 +1,5 @@
 import { Action, MessageType } from '../common/message.types';
+import { transformPerformanceEntry } from './network-transform';
 
 export class EventHandler {
     private clickHandler: ((e: Event) => void) | null = null;
@@ -132,29 +133,8 @@ export class EventHandler {
     private setupNetworkObserver(): void {
         this.networkObserver = new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
-                const e = entry as PerformanceResourceTiming;
-
-                // Skip entries with no transfer data (opaque cross-origin responses)
-                if (e.transferSize === 0 && e.duration === 0) continue;
-
-                const timings = {
-                    all: e.duration,
-                    dns: e.domainLookupEnd - e.domainLookupStart,
-                    connect: e.connectEnd - e.connectStart,
-                    send: e.requestStart > 0 ? e.requestStart - e.connectEnd : 0,
-                    wait: e.responseStart > 0 ? e.responseStart - e.requestStart : 0,
-                    receive: e.responseEnd > 0 ? e.responseEnd - e.responseStart : 0,
-                    ssl: e.secureConnectionStart > 0 ? e.connectEnd - e.secureConnectionStart : 0,
-                };
-
-                const networkEntry = {
-                    url: e.name,
-                    initiatorType: e.initiatorType,
-                    transferSize: e.transferSize,
-                    encodedBodySize: e.encodedBodySize,
-                    decodedBodySize: e.decodedBodySize,
-                    timings,
-                };
+                const networkEntry = transformPerformanceEntry(entry as PerformanceResourceTiming);
+                if (!networkEntry) continue;
 
                 this.port?.postMessage({
                     type: MessageType.NETWORK_ENTRY,

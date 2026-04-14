@@ -1,3 +1,9 @@
+// ============================================
+// HAR Types (legacy DevTools network capture)
+// To be removed once PerformanceObserver path
+// fully replaces DevTools dependency
+// ============================================
+
 interface RoundTrip {
     tabId: number;
     action: string;
@@ -99,4 +105,29 @@ interface ClassificationFlags {
     isTimeNotZero: boolean;
 }
 
-export type { RoundTrip, Header, Cookie, RequestDetails, PostData, ResponseContent, ResponseDetails, CacheData, Timings, Request, ClassificationFlags };
+// ============================================
+// PerformanceObserver Types (new network capture)
+// Replaces HAR capture via content script,
+// removing the DevTools requirement
+// ============================================
+
+interface NetworkEntryTimings {
+    all: number;
+    dns: number;
+    connect: number;
+    send: number;
+    wait: number;
+    receive: number;
+    ssl: number;
+}
+
+interface NetworkEntryPayload {
+    url: string;
+    initiatorType: string;
+    transferSize: number;
+    encodedBodySize: number;
+    decodedBodySize: number;
+    timings: NetworkEntryTimings;
+}
+
+export type { RoundTrip, Header, Cookie, RequestDetails, PostData, ResponseContent, ResponseDetails, CacheData, Timings, Request, ClassificationFlags, NetworkEntryTimings, NetworkEntryPayload };
