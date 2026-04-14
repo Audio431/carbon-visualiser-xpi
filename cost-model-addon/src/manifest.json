@@ -3,6 +3,11 @@
     "name": "Carbon Footprint Tracker",
     "version": "1.0",
 
+    "icons": {
+        "48": "icons/icon-48.png",
+        "96": "icons/icon-96.png"
+    },
+
     "devtools_page": "devtools.html",
 
     "background": {
@@ -13,9 +18,12 @@
     },
 
     "sidebar_action": {
-
       "default_title": "Carbon Footprint Tracker",
       "default_panel": "panel.html",
+      "default_icon": {
+        "48": "icons/icon-48.png",
+        "96": "icons/icon-96.png"
+      },
       "open_at_install": true
     },
 
