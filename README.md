@@ -19,11 +19,15 @@ This extension bridges that gap by accessing system-level metrics through Firefo
 - Displays per-session carbon breakdown (device vs. network) in a sidebar panel
 - Runs entirely client-side with no external server dependency
 
+## Demo
+
+![Carbon Visualiser Demo](docs/demo.gif)
+
 ## Architecture
 
 All data collection and processing runs within the extension:
 
-```
+```text
 Content Script (PerformanceObserver)
     ↓ network timing + transfer sizes
 Background Script (Aggregation Service)
