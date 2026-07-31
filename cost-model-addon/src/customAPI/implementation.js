@@ -173,7 +173,7 @@ this.myAPI = class extends ExtensionAPI {
           return win.gBrowser.selectedBrowser.outerWindowID;
         },
 
-        async getCollapsSubframe(pid) {
+        async getCollapseSubframe(pid) {
           let main = await ChromeUtils.requestProcInfo();
           let child = main.children.find((child) => child.pid === pid);
           let windows = child.windows;
