@@ -23,7 +23,7 @@
     "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.3.6",
     "@react-spring/web": "^10.0.3",
-    "@supabase/supabase-js": "^2.48.1",
+    "@supabase/supabase-js": "^2.103.3",
     "@types/events": "^3.0.3",
     "@types/firefox": "^0.0.34",
     "@types/firefox-webext-browser": "^120.0.4",
